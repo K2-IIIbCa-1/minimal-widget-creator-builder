@@ -10,6 +10,8 @@ const MASK_THRESHOLD = 96;
 const MAX_CONFIG_BYTES = 60 * 1024;
 const DEFAULT_TRACKING = 1;
 const WIDGET_ID_RE = /^[a-z0-9][a-z0-9_-]{0,47}$/;
+const PLACEHOLDER_RE = /\{([A-Za-z][A-Za-z0-9_-]{0,31})\}/g;
+const RUNTIME_ASCII = Array.from({ length: 95 }, (_, i) => String.fromCharCode(i + 32)).join('');
 
 // Service operator: replace this once with the public Worker template repository.
 const TEMPLATE_REPO_URL = 'https://github.com/K2-IIIbCa-1/minimal-widget-creator-worker';
@@ -120,6 +122,14 @@ function validateDaysPattern(text) {
   return count === 1;
 }
 
+function livePlaceholderKeys(text) {
+  return [...text.matchAll(PLACEHOLDER_RE)].map((match) => match[1]).filter((key) => key !== 'days');
+}
+
+function previewDynamicText(text, days) {
+  return text.replace(PLACEHOLDER_RE, (_match, key) => key === 'days' ? String(days) : key);
+}
+
 async function ensureFont() {
   await document.fonts.load(`${FONT_PX}px ${FONT_FAMILY}`, '한글ABC0123');
   await document.fonts.ready;
@@ -227,6 +237,14 @@ function buildGlyphAtlasFromText(text) {
 
 function buildDynamicGlyphAtlas(pattern) {
   const chars = new Set([...pattern.replace('{days}', ''), ...'0123456789-']);
+  const glyphs = {};
+  for (const ch of chars) glyphs[ch] = bakeGlyph(ch);
+  return glyphs;
+}
+
+function buildRuntimeGlyphAtlas(pattern) {
+  const literal = pattern.replace(PLACEHOLDER_RE, '');
+  const chars = new Set([...literal, ...RUNTIME_ASCII]);
   const glyphs = {};
   for (const ch of chars) glyphs[ch] = bakeGlyph(ch);
   return glyphs;
@@ -395,9 +413,24 @@ function buildCorner(name, days, tracking) {
   const layout = CORNER_LAYOUT[name];
   const text = input.text.value;
   const color = input.color.value;
-  const dynamic = validateDaysPattern(text);
+  const hasDays = validateDaysPattern(text);
+  const liveKeys = livePlaceholderKeys(text);
 
-  if (dynamic) {
+  if (liveKeys.length > 0) {
+    const glyphs = buildRuntimeGlyphAtlas(text);
+    const currentText = previewDynamicText(text, days);
+    const preview = layoutGlyphText(currentText, glyphs, layout.anchor, layout.baseline, color, tracking, layout.align);
+    return {
+      width: preview.width,
+      layers: preview.layers,
+      config: {
+        text, color, align: layout.align, anchor: layout.anchor, baseline: layout.baseline,
+        tracking, mode: 'dynamic', glyphs,
+      },
+    };
+  }
+
+  if (hasDays) {
     const glyphs = buildDynamicGlyphAtlas(text);
     const currentText = text.replace('{days}', String(days));
     const preview = layoutGlyphText(currentText, glyphs, layout.anchor, layout.baseline, color, tracking, layout.align);

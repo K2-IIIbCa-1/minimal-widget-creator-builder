@@ -7,6 +7,7 @@ Static client-only Builder. No server-side application is required for the Build
 - Exact 200x40 preview plus 4x inspection preview.
 - Four independent corner strings and colors.
 - `{days}` may appear once in any corner.
+- Generic live placeholders such as `{rank4}` and `{points4}` are baked with an ASCII runtime glyph atlas and filled by the Worker's live-data endpoint.
 - Background URL / local preview image.
 - Frame border/light/dark colors, text shadow, fallback background and dim control.
 - Widget ID controls the deployed public file name (`/<id>.svg`).
