@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Minimal Widget Creator</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/galmuri@latest/dist/galmuri.css">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="titlebar">
+      <strong>Minimal Widget Creator</strong>
+      <span>200 × 40 / Galmuri9 7.5pt</span>
+    </header>
+
+    <div class="workspace">
+      <section class="panel controls" aria-label="Widget settings">
+        <h1>Card settings</h1>
+
+        <label>
+          <span>Widget ID</span>
+          <input id="widgetIdInput" maxlength="48" value="qurare" pattern="[a-z0-9][a-z0-9_-]*" />
+          <small>Used as the file name: <code>/qurare.svg</code>. Lowercase letters, digits, <code>_</code>, <code>-</code>.</small>
+        </label>
+
+        <fieldset>
+          <legend>Corner text</legend>
+          <small class="field-note">Use <code>{days}</code> once in any corner if that corner should update dynamically.</small>
+
+          <div class="text-color-row">
+            <label><span>Top left</span><input id="tlTextInput" maxlength="80" value="Qurare: Magic Library" /></label>
+            <label class="color-field"><span>Color</span><input id="tlColorInput" type="color" value="#f7f7f3" /></label>
+          </div>
+          <div class="text-color-row">
+            <label><span>Top right</span><input id="trTextInput" maxlength="80" value="" placeholder="(empty)" /></label>
+            <label class="color-field"><span>Color</span><input id="trColorInput" type="color" value="#f7f7f3" /></label>
+          </div>
+          <div class="text-color-row">
+            <label><span>Bottom left</span><input id="blTextInput" maxlength="80" value="Since the end..." /></label>
+            <label class="color-field"><span>Color</span><input id="blColorInput" type="color" value="#e8e8e4" /></label>
+          </div>
+          <div class="text-color-row">
+            <label><span>Bottom right</span><input id="brTextInput" maxlength="80" value="Day +{days}" /></label>
+            <label class="color-field"><span>Color</span><input id="brColorInput" type="color" value="#f7f7f3" /></label>
+          </div>
+        </fieldset>
+
+        <div class="row2">
+          <label>
+            <span>Ended at</span>
+            <input id="endedAtInput" type="datetime-local" step="60" value="2018-06-28T10:00" />
+          </label>
+          <label>
+            <span>UTC offset</span>
+            <select id="timezoneInput"></select>
+          </label>
+        </div>
+
+        <fieldset>
+          <legend>Background</legend>
+          <label>
+            <span>Hosted image URL</span>
+            <input id="backgroundUrlInput" type="url" placeholder="https://.../background.webp" />
+          </label>
+          <label>
+            <span>Local image (preview only)</span>
+            <input id="backgroundFileInput" type="file" accept="image/png,image/jpeg,image/webp" />
+          </label>
+          <div class="button-row">
+            <button id="downloadBgButton" type="button" disabled>Download 200×40 WebP</button>
+            <button id="clearBgButton" type="button">Clear local image</button>
+          </div>
+          <small>Local files never leave the browser. Upload the optimized image to your own host before publishing.</small>
+        </fieldset>
+
+        <fieldset>
+          <legend>Frame & colors</legend>
+          <div class="row3">
+            <label><span>Fallback BG</span><input id="fallbackColorInput" type="color" value="#6f7188" /></label>
+            <label><span>Shadow</span><input id="shadowColorInput" type="color" value="#000000" /></label>
+            <label><span>Border</span><input id="borderColorInput" type="color" value="#23232a" /></label>
+          </div>
+          <div class="row2-even">
+            <label><span>Frame light</span><input id="frameLightInput" type="color" value="#cdCDD2" /></label>
+            <label><span>Frame dark</span><input id="frameDarkInput" type="color" value="#414149" /></label>
+          </div>
+        </fieldset>
+
+        <label>
+          <span>Pixel glyph gap</span>
+          <select id="trackingInput">
+            <option value="0">0 px</option>
+            <option value="1" selected>1 px</option>
+            <option value="2">2 px</option>
+            <option value="3">3 px</option>
+          </select>
+          <small>Literal empty pixels inserted between adjacent visible glyphs. Spaces keep their own width.</small>
+        </label>
+
+        <label>
+          <span>Background dim <output id="dimOutput">32%</output></span>
+          <input id="dimInput" type="range" min="0" max="70" value="32" />
+        </label>
+
+        <div id="warningBox" class="warning" hidden></div>
+      </section>
+
+      <section class="panel preview-panel" aria-label="Preview">
+        <h1>Live preview</h1>
+
+        <div class="preview-group">
+          <div>
+            <div class="caption">Actual size</div>
+            <canvas id="previewCanvas" width="200" height="40"></canvas>
+          </div>
+          <div>
+            <div class="caption">4× nearest-neighbor</div>
+            <canvas id="zoomCanvas" width="800" height="160"></canvas>
+          </div>
+        </div>
+
+        <dl class="metrics">
+          <div><dt>Days now</dt><dd id="daysNow">-</dd></div>
+          <div><dt>Ended at ISO</dt><dd id="endedIso">-</dd></div>
+          <div><dt>Payload size</dt><dd id="configSize">-</dd></div>
+          <div><dt>Widget URL</dt><dd id="widgetUrl">-</dd></div>
+        </dl>
+
+        <fieldset class="deployment-box">
+          <legend>Deployment / multi-widget storage</legend>
+          <p class="note">Deploy the Worker once. Every Widget ID is then stored in that Worker's KV namespace and served as <code>/&lt;id&gt;.svg</code>.</p>
+
+          <label>
+            <span>Worker base URL</span>
+            <input id="workerUrlInput" type="url" placeholder="https://minimal-widget-creator.your-subdomain.workers.dev" />
+          </label>
+
+          <label>
+            <span>Admin token</span>
+            <input id="adminTokenInput" type="password" autocomplete="off" placeholder="Generate a token, then use the same value during Cloudflare deployment" />
+          </label>
+          <div class="button-row">
+            <button id="generateTokenButton" type="button">Generate token</button>
+            <button id="copyTokenButton" type="button">Copy token</button>
+            <button id="deployButton" type="button" class="primary">Deploy Worker</button>
+          </div>
+
+          <div class="button-row publish-row">
+            <button id="publishButton" type="button" class="primary">Publish / Update this ID</button>
+            <button id="loadButton" type="button">Load this ID</button>
+            <button id="deleteButton" type="button">Delete this ID</button>
+            <button id="refreshListButton" type="button">Refresh list</button>
+          </div>
+
+          <label>
+            <span>Stored widgets</span>
+            <select id="widgetListInput"><option value="">-</option></select>
+          </label>
+          <div id="deployStatus" class="status" aria-live="polite"></div>
+          <small>Template repo: <code id="templateRepoDisplay">not configured</code></small>
+        </fieldset>
+
+        <details>
+          <summary>Advanced: card payload</summary>
+          <textarea id="configOutput" rows="8" readonly placeholder="Generate or publish a card to see its payload"></textarea>
+          <div class="button-row primary-row">
+            <button id="generateButton" type="button">Generate payload</button>
+            <button id="copyButton" type="button" disabled>Copy payload</button>
+          </div>
+        </details>
+
+        <p class="note">The Builder bakes text into 1-bit pixel masks. The Worker does not need Galmuri or any system font at runtime.</p>
+      </section>
+    </div>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,141 @@
+:root {
+  color-scheme: light;
+  font-family: Tahoma, Arial, sans-serif;
+  background: #c9c6be;
+  color: #202020;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; padding: 18px; }
+
+.shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  border: 1px solid #292929;
+  box-shadow: 1px 1px 0 #fff inset, -1px -1px 0 #666 inset;
+  background: #d4d0c8;
+}
+
+.titlebar {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 8px;
+  color: #fff;
+  background: linear-gradient(90deg, #24387d, #7794cc);
+  font-size: 12px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px;
+}
+
+.panel {
+  background: #d4d0c8;
+  border: 2px groove #efefef;
+  padding: 12px;
+  min-width: 0;
+}
+
+h1, h2 { margin: 0 0 10px; font-size: 12px; font-weight: 700; }
+h2 { margin-top: 16px; }
+label, fieldset { display: block; margin: 0 0 10px; }
+label > span { display: block; margin: 0 0 4px; font-size: 11px; }
+
+fieldset { border: 1px solid #888; padding: 8px; }
+legend { padding: 0 4px; font-size: 11px; }
+small, .note, .field-note { font-size: 10px; line-height: 1.45; color: #4a4a4a; }
+.field-note { display: block; margin: -2px 0 8px; }
+code { font-family: Consolas, monospace; }
+
+input, select, textarea, button { font: 12px Tahoma, Arial, sans-serif; }
+input[type="text"], input[type="url"], input[type="password"], input:not([type]), select, textarea, input[type="datetime-local"] {
+  width: 100%;
+  min-height: 27px;
+  border: 2px inset #fff;
+  background: #fff;
+  padding: 4px 5px;
+  color: #111;
+}
+input[type="file"] { width: 100%; font-size: 11px; }
+input[type="range"] { width: 100%; }
+input[type="color"] { width: 100%; min-height: 30px; padding: 1px; }
+
+.row2 { display: grid; grid-template-columns: 1fr 120px; gap: 8px; }
+.row2-even { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.text-color-row { display: grid; grid-template-columns: minmax(0, 1fr) 66px; gap: 7px; align-items: end; }
+.text-color-row label { margin-bottom: 8px; }
+.color-field input { min-width: 52px; }
+
+button {
+  min-height: 27px;
+  padding: 4px 9px;
+  border: 2px outset #fff;
+  background: #d4d0c8;
+  color: #111;
+  cursor: pointer;
+}
+button:active { border-style: inset; }
+button:disabled { color: #777; cursor: default; }
+button.primary { font-weight: 700; }
+.button-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.primary-row { margin-top: 8px; }
+.publish-row { margin: 12px 0 10px; }
+
+.preview-panel { overflow: hidden; }
+.preview-group { display: grid; gap: 14px; }
+.caption { font-size: 10px; margin-bottom: 4px; color: #444; }
+
+#previewCanvas, #zoomCanvas {
+  display: block;
+  border: 0;
+  outline: 1px solid #555;
+  background: #777;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+#previewCanvas { width: 200px; height: 40px; max-width: none; box-sizing: content-box; }
+#zoomCanvas { width: min(800px, 100%); height: auto; box-sizing: content-box; }
+
+.metrics { display: grid; grid-template-columns: 1fr; gap: 4px; margin: 14px 0; font-size: 10px; }
+.metrics > div { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 8px; }
+.metrics dt { color: #555; }
+.metrics dd { margin: 0; font-family: Consolas, monospace; overflow-wrap: anywhere; }
+
+.deployment-box { margin-top: 14px; }
+.status {
+  min-height: 18px;
+  margin: 8px 0;
+  padding: 5px 6px;
+  border: 1px solid #888;
+  background: #ece9d8;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.status.error { border-color: #9c3b32; background: #f6d8d3; }
+
+details { margin-top: 12px; font-size: 11px; }
+summary { cursor: pointer; margin-bottom: 8px; }
+textarea { resize: vertical; min-height: 118px; font-family: Consolas, monospace; font-size: 10px; line-height: 1.35; }
+
+.warning {
+  margin-top: 8px;
+  padding: 7px;
+  border: 1px solid #956f00;
+  background: #fff4c4;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+@media (max-width: 760px) {
+  body { padding: 6px; }
+  .workspace { grid-template-columns: 1fr; }
+  .titlebar { align-items: flex-start; flex-direction: column; }
+  .row2, .row2-even, .row3 { grid-template-columns: 1fr; }
+}
