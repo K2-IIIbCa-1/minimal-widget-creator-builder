@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Help - Minimal Widget Creator</title>
+  <link rel="stylesheet" href="../styles.css" />
+  <link rel="stylesheet" href="./help.css" />
+</head>
+<body>
+  <main class="shell help-shell">
+    <header class="titlebar">
+      <strong>Minimal Widget Creator — Help</strong>
+      <div class="titlebar-tools">
+        <a class="titlebar-link" href="../">← Builder</a>
+        <span>Setup guide</span>
+      </div>
+    </header>
+
+    <div class="help-workspace">
+      <section class="panel help-toolbar" aria-label="Language">
+        <div class="language-switch" role="radiogroup" aria-label="Language">
+          <label>
+            <input type="radio" name="language" value="ko" checked />
+            <span>한국어</span>
+          </label>
+          <label>
+            <input type="radio" name="language" value="en" />
+            <span>English</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel help-content" data-lang="ko">
+        <h1>사용 방법</h1>
+        <p class="help-lead">Worker는 한 번만 배포하면 됩니다. 같은 Worker에 여러 Widget ID를 저장하고 각각 <code>/&lt;id&gt;.svg</code>로 사용할 수 있습니다.</p>
+
+        <ol class="steps">
+          <li>
+            <h2>위젯을 디자인합니다</h2>
+            <p>네 모서리 문구, 색상, 날짜, 배경, 프레임을 설정합니다. <code>{days}</code>는 종료일로부터 지난 일수로 자동 치환됩니다.</p>
+          </li>
+          <li>
+            <h2>배경 이미지를 준비합니다</h2>
+            <p><strong>Local image</strong>는 브라우저 미리보기와 200×40 WebP 내보내기용입니다. 실제 배포 위젯에 배경을 넣으려면 공개 HTTPS 이미지 주소를 <strong>Hosted image URL</strong>에 넣습니다.</p>
+          </li>
+          <li>
+            <h2>Admin token을 만듭니다</h2>
+            <p><strong>Generate token</strong>을 누르고 토큰을 보관합니다. <code>ADMIN_TOKEN</code>은 Builder의 위젯 생성·수정·삭제 권한을 보호합니다.</p>
+          </li>
+          <li>
+            <h2>Worker를 배포합니다</h2>
+            <p><strong>Deploy Worker</strong>를 눌러 Worker 템플릿을 Cloudflare에 배포합니다. Worker 하나가 여러 위젯을 담당합니다.</p>
+          </li>
+          <li class="important-step">
+            <h2>Cloudflare Secret을 확인합니다</h2>
+            <p>배포된 Worker에서 아래 Secret을 확인합니다. 배포 과정에서 자동으로 묻지 않았거나 값이 없다면 직접 추가합니다.</p>
+            <div class="path-box">Worker → Settings → Variables and Secrets</div>
+            <dl class="compact-kv">
+              <div><dt><code>ADMIN_TOKEN</code></dt><dd>Builder에서 생성한 Admin token과 동일한 값</dd></div>
+              <div><dt><code>DATA_TOKEN</code></dt><dd>실시간 데이터 연동용 별도 랜덤 토큰. 실시간 연동을 쓰지 않아도 등록해 둘 수 있습니다.</dd></div>
+            </dl>
+          </li>
+          <li>
+            <h2>Worker 주소를 Builder에 연결합니다</h2>
+            <p><strong>Worker base URL</strong>에 배포된 Worker 주소를 넣고, <strong>Admin token</strong>에는 같은 <code>ADMIN_TOKEN</code> 값을 입력합니다.</p>
+            <div class="example-box"><code>https://your-worker.workers.dev</code><br />또는 <code>https://widgets.example.com</code></div>
+          </li>
+          <li>
+            <h2>위젯을 Publish합니다</h2>
+            <p><strong>Widget ID</strong>를 정하고 <strong>Publish / Update this ID</strong>를 누릅니다. 같은 ID를 다시 Publish하면 기존 위젯이 업데이트됩니다.</p>
+            <div class="example-box"><code>qurare</code> → <code>https://widgets.example.com/qurare.svg</code></div>
+          </li>
+        </ol>
+
+        <fieldset class="help-box">
+          <legend>동적 placeholder</legend>
+          <p><code>{days}</code>는 Builder가 기본 제공하는 값입니다. <strong>Ended at</strong>을 기준으로 지난 일수를 Worker가 직접 계산하므로 외부 데이터가 필요 없습니다.</p>
+          <p>그 외에는 원하는 이름을 자유롭게 사용할 수 있습니다. 예를 들어 Worker에 <code>rank4</code>, <code>points4</code>, <code>nickname</code> 값을 저장해 두면 문구에서 각각 <code>{rank4}</code>, <code>{points4}</code>, <code>{nickname}</code>으로 불러옵니다.</p>
+          <div class="example-box"><code>{nickname}</code><br /><code>{rank4} / {points4} pt</code></div>
+          <p>값을 넣을 때는 <code>DATA_TOKEN</code>으로 아래 endpoint에 JSON을 전송합니다. Worker는 이를 해당 위젯의 live KV 값으로 저장하고, 같은 이름의 placeholder를 치환합니다.</p>
+          <div class="example-box"><code>PUT /api/widgets/&lt;id&gt;/data</code><br /><code>Authorization: Bearer &lt;DATA_TOKEN&gt;</code><br /><code>{"nickname":"SDTR","rank4":"Master I","points4":567}</code></div>
+          <p><code>DATA_TOKEN</code>은 실시간 값 갱신 전용이며, 위젯 생성·수정·삭제에 쓰는 <code>ADMIN_TOKEN</code>과 별개입니다.</p>
+        </fieldset>
+
+        <fieldset class="help-box">
+          <legend>기존 위젯 관리</legend>
+          <p><strong>Refresh list</strong>로 저장된 ID를 불러오고, <strong>Load this ID</strong>로 설정을 다시 불러옵니다. 같은 ID로 Publish하면 업데이트되고, <strong>Delete this ID</strong>는 위젯 설정과 해당 live data를 함께 삭제합니다.</p>
+        </fieldset>
+
+        <fieldset class="help-box troubleshooting">
+          <legend>문제가 생겼다면</legend>
+          <dl class="compact-kv">
+            <div><dt>Unauthorized</dt><dd>Cloudflare에 등록한 토큰과 요청에 사용한 토큰이 같은지 확인합니다.</dd></div>
+            <div><dt>Widget not found</dt><dd>Widget ID가 실제로 Publish되어 있는지 확인합니다.</dd></div>
+            <div><dt>동적 값이 안 나옴</dt><dd>placeholder 이름과 전송한 JSON key가 같은지, 최신 Worker가 배포되어 있는지 확인합니다.</dd></div>
+            <div><dt>배경이 안 보임</dt><dd><strong>Hosted image URL</strong>이 공개 HTTPS 이미지인지 확인합니다.</dd></div>
+          </dl>
+        </fieldset>
+
+        <p class="security-note"><strong><code>ADMIN_TOKEN</code>, <code>DATA_TOKEN</code>은 공개 저장소, 위젯 URL, SVG 안에 넣지 마세요.</strong> 공개 SVG를 보는 사람에게는 토큰이 필요하지 않습니다.</p>
+      </section>
+
+      <section class="panel help-content" data-lang="en" hidden>
+        <h1>How to use</h1>
+        <p class="help-lead">Deploy the Worker once. One Worker can store multiple Widget IDs and serve each one as <code>/&lt;id&gt;.svg</code>.</p>
+
+        <ol class="steps">
+          <li>
+            <h2>Design your widget</h2>
+            <p>Configure the four corner strings, colors, date, background, and frame. <code>{days}</code> is replaced with elapsed days automatically.</p>
+          </li>
+          <li>
+            <h2>Prepare the background</h2>
+            <p><strong>Local image</strong> is only for browser preview and exporting a 200×40 WebP. For a deployed background, set <strong>Hosted image URL</strong> to a public HTTPS image.</p>
+          </li>
+          <li>
+            <h2>Create an Admin token</h2>
+            <p>Click <strong>Generate token</strong> and keep it safe. <code>ADMIN_TOKEN</code> protects create, update, and delete operations from the Builder.</p>
+          </li>
+          <li>
+            <h2>Deploy the Worker</h2>
+            <p>Click <strong>Deploy Worker</strong> and deploy the template to Cloudflare. One deployment can host many widgets.</p>
+          </li>
+          <li class="important-step">
+            <h2>Check Cloudflare Secrets</h2>
+            <p>Verify these Secrets on the deployed Worker. If the deploy flow did not ask for them, add them manually.</p>
+            <div class="path-box">Worker → Settings → Variables and Secrets</div>
+            <dl class="compact-kv">
+              <div><dt><code>ADMIN_TOKEN</code></dt><dd>The same Admin token generated in the Builder</dd></div>
+              <div><dt><code>DATA_TOKEN</code></dt><dd>A separate random token for trusted live-data writers</dd></div>
+            </dl>
+          </li>
+          <li>
+            <h2>Connect the Worker to the Builder</h2>
+            <p>Enter the deployed Worker address in <strong>Worker base URL</strong>, then enter the same <code>ADMIN_TOKEN</code> in <strong>Admin token</strong>.</p>
+            <div class="example-box"><code>https://your-worker.workers.dev</code><br />or <code>https://widgets.example.com</code></div>
+          </li>
+          <li>
+            <h2>Publish the widget</h2>
+            <p>Choose a <strong>Widget ID</strong> and click <strong>Publish / Update this ID</strong>. Publishing the same ID again updates it.</p>
+            <div class="example-box"><code>qurare</code> → <code>https://widgets.example.com/qurare.svg</code></div>
+          </li>
+        </ol>
+
+        <fieldset class="help-box">
+          <legend>Dynamic placeholders</legend>
+          <p><code>{days}</code> is built in. The Worker calculates elapsed days from <strong>Ended at</strong>, so it does not require external data.</p>
+          <p>Other names are user-defined. If the Worker stores values for keys such as <code>rank4</code>, <code>points4</code>, or <code>nickname</code>, you can reference them as <code>{rank4}</code>, <code>{points4}</code>, or <code>{nickname}</code>.</p>
+          <div class="example-box"><code>{nickname}</code><br /><code>{rank4} / {points4} pt</code></div>
+          <p>Send JSON to the live-data endpoint with <code>DATA_TOKEN</code>. The Worker stores those key/value pairs for the widget and substitutes matching placeholders.</p>
+          <div class="example-box"><code>PUT /api/widgets/&lt;id&gt;/data</code><br /><code>Authorization: Bearer &lt;DATA_TOKEN&gt;</code><br /><code>{"nickname":"SDTR","rank4":"Master I","points4":567}</code></div>
+          <p><code>DATA_TOKEN</code> is only for updating live values. It is separate from <code>ADMIN_TOKEN</code>, which manages widget configs.</p>
+        </fieldset>
+
+        <fieldset class="help-box">
+          <legend>Managing existing widgets</legend>
+          <p>Use <strong>Refresh list</strong> to load stored IDs and <strong>Load this ID</strong> to edit one. Publishing the same ID updates it. <strong>Delete this ID</strong> removes both the widget config and its live data.</p>
+        </fieldset>
+
+        <fieldset class="help-box troubleshooting">
+          <legend>If something goes wrong</legend>
+          <dl class="compact-kv">
+            <div><dt>Unauthorized</dt><dd>Check that the token sent with the request matches the one stored in Cloudflare.</dd></div>
+            <div><dt>Widget not found</dt><dd>Check that the Widget ID has actually been published.</dd></div>
+            <div><dt>Live value missing</dt><dd>Check that the placeholder name matches the JSON key and that the latest Worker is deployed.</dd></div>
+            <div><dt>No background</dt><dd>Check that <strong>Hosted image URL</strong> points to a public HTTPS image.</dd></div>
+          </dl>
+        </fieldset>
+
+        <p class="security-note"><strong>Never put <code>ADMIN_TOKEN</code> or <code>DATA_TOKEN</code> in a public repository, widget URL, or SVG.</strong> Public viewers of the SVG do not need either token.</p>
+      </section>
+    </div>
+  </main>
+
+  <script src="./help.js"></script>
+</body>
+</html>

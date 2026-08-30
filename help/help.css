@@ -1,0 +1,84 @@
+.help-shell { max-width: 900px; }
+.help-workspace { display: grid; gap: 8px; padding: 8px; }
+.help-toolbar { padding: 8px 10px; }
+.help-content { padding: 14px; }
+.help-content h1 { margin-bottom: 5px; }
+.help-lead { margin: 0 0 14px; font-size: 11px; line-height: 1.55; }
+
+.language-switch {
+  display: inline-flex;
+  border: 2px inset #fff;
+  background: #b9b6af;
+  padding: 2px;
+  gap: 2px;
+}
+.language-switch label { margin: 0; cursor: pointer; }
+.language-switch input { position: absolute; opacity: 0; pointer-events: none; }
+.language-switch span {
+  display: block;
+  min-width: 78px;
+  padding: 5px 10px;
+  text-align: center;
+  font-size: 11px;
+  border: 2px outset #fff;
+  background: #d4d0c8;
+  color: #111;
+}
+.language-switch input:checked + span {
+  border-style: inset;
+  background: #ece9d8;
+  font-weight: 700;
+}
+.language-switch input:focus-visible + span { outline: 1px dotted #111; outline-offset: -4px; }
+
+.steps { margin: 0; padding: 0; list-style: none; counter-reset: step; }
+.steps > li {
+  position: relative;
+  counter-increment: step;
+  margin: 0 0 8px;
+  padding: 10px 10px 10px 42px;
+  border: 1px solid #888;
+  background: #e8e6df;
+}
+.steps > li::before {
+  content: counter(step);
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  border: 2px outset #fff;
+  background: #d4d0c8;
+  font-size: 11px;
+  font-weight: 700;
+}
+.steps h2 { margin: 0 0 4px; font-size: 11px; }
+.steps p, .help-box p { margin: 0; font-size: 10px; line-height: 1.55; }
+.steps p + .path-box, .steps p + .example-box, .help-box p + .example-box { margin-top: 7px; }
+.help-box .example-box + p { margin-top: 7px; }
+.important-step { border-color: #9a7420 !important; background: #fff4c4 !important; }
+
+.path-box, .example-box {
+  margin: 7px 0;
+  padding: 7px 8px;
+  border: 1px solid #888;
+  background: #fff;
+  font: 10px/1.55 Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.help-box { margin-top: 12px; background: #dedbd3; }
+.troubleshooting { background: #ece9d8; }
+.compact-kv { margin: 6px 0 0; font-size: 10px; }
+.compact-kv > div { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 8px; padding: 4px 0; border-top: 1px dotted #999; }
+.compact-kv > div:first-child { border-top: 0; }
+.compact-kv dt { font-weight: 700; }
+.compact-kv dd { margin: 0; line-height: 1.45; overflow-wrap: anywhere; }
+.security-note { margin: 12px 0 0; padding: 8px; border: 1px solid #777; background: #fff; font-size: 10px; line-height: 1.5; }
+
+@media (max-width: 560px) {
+  .compact-kv > div { grid-template-columns: 1fr; gap: 2px; }
+  .steps > li { padding-left: 38px; }
+}
