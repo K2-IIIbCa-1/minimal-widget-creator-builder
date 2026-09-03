@@ -48,7 +48,6 @@ const els = {
   liveImageCropHeight: $('liveImageCropHeightInput'),
   liveImageOutputX: $('liveImageOutputXInput'),
   liveImageOutputY: $('liveImageOutputYInput'),
-  liveImagePreviewUrl: $('liveImagePreviewUrlInput'),
   fallbackColor: $('fallbackColorInput'),
   shadowColor: $('shadowColorInput'),
   borderColor: $('borderColorInput'),
@@ -91,6 +90,7 @@ const cornerInputs = {
 let localBackgroundUrl = null;
 let localBackgroundImage = null;
 let hostedBackgroundImage = null;
+let loadedLiveValues = {};
 let livePreviewImage = null;
 let lastConfig = '';
 let renderGeneration = 0;
@@ -440,8 +440,9 @@ async function loadHostedBackground() {
 }
 
 async function loadLivePreviewImage() {
-  const src = els.liveImagePreviewUrl.value.trim();
-  if (!els.liveImageEnabled.checked || !src) { livePreviewImage = null; return; }
+  const key = els.liveImageKey.value.trim();
+  const src = els.liveImageEnabled.checked && LIVE_KEY_RE.test(key) ? loadedLiveValues[key] : null;
+  if (typeof src !== 'string' || !/^https:\/\//i.test(src)) { livePreviewImage = null; return; }
   const image = new Image();
   livePreviewImage = await new Promise((resolve) => {
     image.onload = () => resolve(image);
@@ -573,8 +574,16 @@ async function renderPreview() {
     if (els.bgUrl.value.trim() && !hostedBackgroundImage && !localBackgroundImage) {
       warnings.push('Background URL could not be previewed. It may still work in the Worker if the host blocks browser CORS.');
     }
-    if (els.liveImageEnabled.checked && els.liveImagePreviewUrl.value.trim() && !livePreviewImage) {
-      warnings.push('Live image URL could not be previewed. The Worker may still be able to fetch it.');
+    if (els.liveImageEnabled.checked) {
+      const key = els.liveImageKey.value.trim();
+      const src = loadedLiveValues[key];
+      if (typeof src !== 'string' || !src) {
+        warnings.push(`No stored live image value for ${key || 'this key'}. Load the Widget ID after its data source has pushed live data.`);
+      } else if (!/^https:\/\//i.test(src)) {
+        warnings.push('Stored live image value must be an HTTPS URL.');
+      } else if (!livePreviewImage) {
+        warnings.push('Stored live image could not be previewed. The Worker may still be able to fetch it.');
+      }
     }
     showWarnings(warnings);
   } catch (error) {
@@ -649,7 +658,6 @@ function applyConfig(encoded) {
     [els.liveImageOutputX.value, els.liveImageOutputY.value] = liveImage.position.map(String);
   }
   els.liveImageFields.hidden = !liveImage;
-  els.liveImagePreviewUrl.value = '';
   livePreviewImage = null;
   els.fallbackColor.value = config.fallbackColor || '#6f7188';
   els.shadowColor.value = config.shadowColor || '#000000';
@@ -761,8 +769,9 @@ async function loadWidget() {
     const id = validateWidgetId();
     setDeployStatus(`Loading ${id}...`);
     const result = await adminRequest('GET', `/api/widgets/${id}`);
+    loadedLiveValues = result.live && typeof result.live === 'object' && !Array.isArray(result.live) ? result.live : {};
     applyConfig(result.config);
-    await loadHostedBackground();
+    await Promise.all([loadHostedBackground(), loadLivePreviewImage()]);
     await renderPreview();
     setDeployStatus(`Loaded: ${id}`);
   } catch (error) {
@@ -824,14 +833,10 @@ els.liveImageEnabled.addEventListener('change', async () => {
   await loadLivePreviewImage();
   renderPreview();
 });
-els.liveImagePreviewUrl.addEventListener('change', async () => {
+els.liveImageKey.addEventListener('change', async () => {
   await loadLivePreviewImage();
   renderPreview();
 });
-els.liveImagePreviewUrl.addEventListener('input', debounce(async () => {
-  await loadLivePreviewImage();
-  renderPreview();
-}, 450));
 
 els.bgUrl.addEventListener('change', async () => {
   lastConfig = '';

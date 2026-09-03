@@ -9,7 +9,7 @@ Static client-only Builder. No server-side application is required for the Build
 - `{days}` may appear once in any corner.
 - Generic live placeholders such as `{rank4}` and `{points4}` are baked with an ASCII runtime glyph atlas and filled by the Worker's live-data endpoint.
 - Background URL / local preview image.
-- Optional live image crop layer driven by a live-data URL key, with source/crop/output pixel controls and a preview-only URL.
+- Optional live image crop layer driven by a live-data URL key, with source/crop/output pixel controls and automatic preview from the selected widget's stored live data.
 - Frame border/light/dark colors, text shadow, fallback background and dim control.
 - Widget ID controls the deployed public file name (`/<id>.svg`).
 - Direct create/update/load/delete against the user's deployed Worker using an admin token.
