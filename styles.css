@@ -60,7 +60,7 @@ small, .note, .field-note { font-size: 10px; line-height: 1.45; color: #4a4a4a; 
 code { font-family: Consolas, monospace; }
 
 input, select, textarea, button { font: 12px Tahoma, Arial, sans-serif; }
-input[type="text"], input[type="url"], input[type="password"], input:not([type]), select, textarea, input[type="datetime-local"] {
+input[type="text"], input[type="url"], input[type="password"], input[type="number"], input:not([type]), select, textarea, input[type="datetime-local"] {
   width: 100%;
   min-height: 27px;
   border: 2px inset #fff;
@@ -78,6 +78,8 @@ input[type="color"] { width: 100%; min-height: 30px; padding: 1px; }
 .text-color-row { display: grid; grid-template-columns: minmax(0, 1fr) 66px; gap: 7px; align-items: end; }
 .text-color-row label { margin-bottom: 8px; }
 .color-field input { min-width: 52px; }
+.toggle-row { display: flex; align-items: center; gap: 7px; }
+.toggle-row > span { margin: 0; }
 
 button {
   min-height: 27px;

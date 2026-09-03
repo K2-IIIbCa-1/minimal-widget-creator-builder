@@ -10,6 +10,7 @@ const MASK_THRESHOLD = 96;
 const MAX_CONFIG_BYTES = 60 * 1024;
 const DEFAULT_TRACKING = 1;
 const WIDGET_ID_RE = /^[a-z0-9][a-z0-9_-]{0,47}$/;
+const LIVE_KEY_RE = /^[A-Za-z][A-Za-z0-9_-]{0,31}$/;
 const PLACEHOLDER_RE = /\{([A-Za-z][A-Za-z0-9_-]{0,31})\}/g;
 const RUNTIME_ASCII = Array.from({ length: 95 }, (_, i) => String.fromCharCode(i + 32)).join('');
 
@@ -36,6 +37,18 @@ const els = {
   bgFile: $('backgroundFileInput'),
   downloadBg: $('downloadBgButton'),
   clearBg: $('clearBgButton'),
+  liveImageEnabled: $('liveImageEnabledInput'),
+  liveImageFields: $('liveImageFields'),
+  liveImageKey: $('liveImageKeyInput'),
+  liveImageSourceWidth: $('liveImageSourceWidthInput'),
+  liveImageSourceHeight: $('liveImageSourceHeightInput'),
+  liveImageCropX: $('liveImageCropXInput'),
+  liveImageCropY: $('liveImageCropYInput'),
+  liveImageCropWidth: $('liveImageCropWidthInput'),
+  liveImageCropHeight: $('liveImageCropHeightInput'),
+  liveImageOutputX: $('liveImageOutputXInput'),
+  liveImageOutputY: $('liveImageOutputYInput'),
+  liveImagePreviewUrl: $('liveImagePreviewUrlInput'),
   fallbackColor: $('fallbackColorInput'),
   shadowColor: $('shadowColorInput'),
   borderColor: $('borderColorInput'),
@@ -78,6 +91,7 @@ const cornerInputs = {
 let localBackgroundUrl = null;
 let localBackgroundImage = null;
 let hostedBackgroundImage = null;
+let livePreviewImage = null;
 let lastConfig = '';
 let renderGeneration = 0;
 
@@ -114,6 +128,36 @@ function validateWidgetId() {
     throw new Error('Widget ID must start with a lowercase letter/digit and use only a-z, 0-9, _ or -.');
   }
   return id;
+}
+
+function integerInput(input, label) {
+  const value = Number(input.value);
+  if (!Number.isInteger(value)) throw new Error(`${label} must be an integer.`);
+  return value;
+}
+
+function buildLiveImageConfig() {
+  if (!els.liveImageEnabled.checked) return null;
+  const key = els.liveImageKey.value.trim();
+  if (!LIVE_KEY_RE.test(key)) throw new Error('Live image key must use letters, digits, _ or - and start with a letter.');
+
+  const sourceW = integerInput(els.liveImageSourceWidth, 'Source width');
+  const sourceH = integerInput(els.liveImageSourceHeight, 'Source height');
+  if (sourceW < 1 || sourceH < 1 || sourceW > 2048 || sourceH > 2048) throw new Error('Live image source size must be between 1 and 2048 px.');
+
+  const cropX = integerInput(els.liveImageCropX, 'Crop X');
+  const cropY = integerInput(els.liveImageCropY, 'Crop Y');
+  const cropW = integerInput(els.liveImageCropWidth, 'Crop width');
+  const cropH = integerInput(els.liveImageCropHeight, 'Crop height');
+  if (cropX < 0 || cropY < 0 || cropW < 1 || cropH < 1 || cropX + cropW > sourceW || cropY + cropH > sourceH) {
+    throw new Error('Live image crop must stay inside the source image.');
+  }
+
+  const x = integerInput(els.liveImageOutputX, 'Output X');
+  const y = integerInput(els.liveImageOutputY, 'Output Y');
+  if (x < -W || x > W || y < -H || y > H) throw new Error('Live image output position is out of bounds.');
+
+  return { key, sourceSize: [sourceW, sourceH], crop: [cropX, cropY, cropW, cropH], position: [x, y] };
 }
 
 function validateDaysPattern(text) {
@@ -395,6 +439,29 @@ async function loadHostedBackground() {
   });
 }
 
+async function loadLivePreviewImage() {
+  const src = els.liveImagePreviewUrl.value.trim();
+  if (!els.liveImageEnabled.checked || !src) { livePreviewImage = null; return; }
+  const image = new Image();
+  livePreviewImage = await new Promise((resolve) => {
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = src;
+  });
+}
+
+function drawLiveImageCrop(ctx, image, config) {
+  const [sourceW, sourceH] = config.sourceSize;
+  const [cropX, cropY, cropW, cropH] = config.crop;
+  const [x, y] = config.position;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, cropW, cropH);
+  ctx.clip();
+  ctx.drawImage(image, x - cropX, y - cropY, sourceW, sourceH);
+  ctx.restore();
+}
+
 function optimizedBackgroundBlob() {
   return new Promise((resolve, reject) => {
     const img = localBackgroundImage;
@@ -478,6 +545,8 @@ async function renderPreview() {
     if (bg) drawImageCover(ctx, bg); else drawFallbackBackground(ctx);
     ctx.fillStyle = `rgba(0,0,0,${Number(els.dim.value) / 100})`;
     ctx.fillRect(0, 0, W, H);
+    const liveImage = buildLiveImageConfig();
+    if (liveImage && livePreviewImage) drawLiveImageCrop(ctx, livePreviewImage, liveImage);
     drawFrame(ctx);
     for (const name of ['tl', 'tr', 'bl', 'br']) {
       for (const layer of baked.corners[name].layers) drawPackedMask(ctx, layer, layer.color);
@@ -503,6 +572,9 @@ async function renderPreview() {
     if (baked.corners.bl.width + baked.corners.br.width + 6 > usableWidth) warnings.push('Bottom-left and bottom-right text may overlap.');
     if (els.bgUrl.value.trim() && !hostedBackgroundImage && !localBackgroundImage) {
       warnings.push('Background URL could not be previewed. It may still work in the Worker if the host blocks browser CORS.');
+    }
+    if (els.liveImageEnabled.checked && els.liveImagePreviewUrl.value.trim() && !livePreviewImage) {
+      warnings.push('Live image URL could not be previewed. The Worker may still be able to fetch it.');
     }
     showWarnings(warnings);
   } catch (error) {
@@ -530,11 +602,13 @@ async function generateConfig() {
   const backgroundUrl = els.bgUrl.value.trim();
   if (backgroundUrl && !/^https:\/\//i.test(backgroundUrl)) throw new Error('Hosted background URL must use HTTPS.');
 
+  const liveImage = buildLiveImageConfig();
   const config = {
     v: 3,
     size: [W, H],
     endedAt: baked.iso,
     backgroundUrl,
+    ...(liveImage ? { liveImage } : {}),
     fallbackColor: els.fallbackColor.value,
     dim: Number(els.dim.value) / 100,
     shadowColor: els.shadowColor.value,
@@ -566,6 +640,17 @@ function applyConfig(encoded) {
     els.timezone.value = match[2];
   }
   els.bgUrl.value = config.backgroundUrl || '';
+  const liveImage = config.liveImage || null;
+  els.liveImageEnabled.checked = Boolean(liveImage);
+  if (liveImage) {
+    els.liveImageKey.value = liveImage.key;
+    [els.liveImageSourceWidth.value, els.liveImageSourceHeight.value] = liveImage.sourceSize.map(String);
+    [els.liveImageCropX.value, els.liveImageCropY.value, els.liveImageCropWidth.value, els.liveImageCropHeight.value] = liveImage.crop.map(String);
+    [els.liveImageOutputX.value, els.liveImageOutputY.value] = liveImage.position.map(String);
+  }
+  els.liveImageFields.hidden = !liveImage;
+  els.liveImagePreviewUrl.value = '';
+  livePreviewImage = null;
   els.fallbackColor.value = config.fallbackColor || '#6f7188';
   els.shadowColor.value = config.shadowColor || '#000000';
   els.borderColor.value = config.frame?.border || '#23232a';
@@ -718,7 +803,9 @@ function generateAdminToken() {
 const configInputs = [
   els.tlText, els.tlColor, els.trText, els.trColor, els.blText, els.blColor, els.brText, els.brColor,
   els.endedAt, els.timezone, els.fallbackColor, els.shadowColor, els.borderColor, els.frameLight, els.frameDark,
-  els.dim, els.tracking,
+  els.dim, els.tracking, els.liveImageKey, els.liveImageSourceWidth, els.liveImageSourceHeight,
+  els.liveImageCropX, els.liveImageCropY, els.liveImageCropWidth, els.liveImageCropHeight,
+  els.liveImageOutputX, els.liveImageOutputY,
 ];
 for (const input of configInputs) {
   input.addEventListener('input', invalidateAndRender);
@@ -729,6 +816,22 @@ els.widgetId.addEventListener('input', updateWidgetUrl);
 els.widgetId.addEventListener('change', updateWidgetUrl);
 els.workerUrl.addEventListener('input', updateWidgetUrl);
 els.workerUrl.addEventListener('change', updateWidgetUrl);
+
+els.liveImageEnabled.addEventListener('change', async () => {
+  els.liveImageFields.hidden = !els.liveImageEnabled.checked;
+  lastConfig = '';
+  els.copy.disabled = true;
+  await loadLivePreviewImage();
+  renderPreview();
+});
+els.liveImagePreviewUrl.addEventListener('change', async () => {
+  await loadLivePreviewImage();
+  renderPreview();
+});
+els.liveImagePreviewUrl.addEventListener('input', debounce(async () => {
+  await loadLivePreviewImage();
+  renderPreview();
+}, 450));
 
 els.bgUrl.addEventListener('change', async () => {
   lastConfig = '';
@@ -826,6 +929,7 @@ els.widgetList.addEventListener('change', () => {
 
 async function init() {
   populateTimezones();
+  els.liveImageFields.hidden = !els.liveImageEnabled.checked;
   els.templateRepoDisplay.textContent = TEMPLATE_REPO_URL;
 
   try {

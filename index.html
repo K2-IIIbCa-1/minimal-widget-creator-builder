@@ -78,6 +78,41 @@
         </fieldset>
 
         <fieldset>
+          <legend>Live image</legend>
+          <label class="toggle-row">
+            <input id="liveImageEnabledInput" type="checkbox" />
+            <span>Enable live image crop</span>
+          </label>
+          <div id="liveImageFields" hidden>
+            <label>
+              <span>Live data key</span>
+              <input id="liveImageKeyInput" maxlength="32" value="characterImage" />
+            </label>
+            <div class="row2-even">
+              <label><span>Source width</span><input id="liveImageSourceWidthInput" type="number" min="1" max="2048" step="1" value="300" /></label>
+              <label><span>Source height</span><input id="liveImageSourceHeightInput" type="number" min="1" max="2048" step="1" value="300" /></label>
+            </div>
+            <div class="row2-even">
+              <label><span>Crop X</span><input id="liveImageCropXInput" type="number" min="0" step="1" value="130" /></label>
+              <label><span>Crop Y</span><input id="liveImageCropYInput" type="number" min="0" step="1" value="40" /></label>
+            </div>
+            <div class="row2-even">
+              <label><span>Crop width</span><input id="liveImageCropWidthInput" type="number" min="1" step="1" value="40" /></label>
+              <label><span>Crop height</span><input id="liveImageCropHeightInput" type="number" min="1" step="1" value="40" /></label>
+            </div>
+            <div class="row2-even">
+              <label><span>Output X</span><input id="liveImageOutputXInput" type="number" step="1" value="160" /></label>
+              <label><span>Output Y</span><input id="liveImageOutputYInput" type="number" step="1" value="0" /></label>
+            </div>
+            <label>
+              <span>Preview image URL (not saved)</span>
+              <input id="liveImagePreviewUrlInput" type="url" placeholder="https://.../avatar.png" />
+            </label>
+            <small>The source is drawn at its configured pixel size with no scaling. Only the crop rectangle is shown in the widget.</small>
+          </div>
+        </fieldset>
+
+        <fieldset>
           <legend>Frame & colors</legend>
           <div class="row3">
             <label><span>Fallback BG</span><input id="fallbackColorInput" type="color" value="#6f7188" /></label>
