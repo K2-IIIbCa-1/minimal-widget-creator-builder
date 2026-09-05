@@ -7,7 +7,7 @@ Static client-only Builder. No server-side application is required for the Build
 - Exact 200x40 preview plus 4x inspection preview.
 - Four independent corner strings and colors.
 - `{days}` may appear once in any corner.
-- Generic live placeholders such as `{rank4}` and `{points4}` are baked with an ASCII runtime glyph atlas and filled by the Worker's live-data endpoint.
+- Generic live placeholders such as `{rank4}` and `{points4}` preview the currently loaded live value with pinned Galmuri9 2.40.3; the Worker fills them from its live-data endpoint and supplies missing runtime glyphs from its matching pre-baked font pack.
 - Compact image-layer stack with a fixed Background layer plus up to five additional layers.
 - Each image source, position/size value and crop value can be Fixed or reference a live-data field with a fallback; position/size and crop controls stay collapsed until needed.
 - Local Background preview/export remains browser-only.

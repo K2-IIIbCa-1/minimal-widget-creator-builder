@@ -417,7 +417,12 @@ function livePlaceholderKeys(text) {
 }
 
 function previewDynamicText(text, days) {
-  return text.replace(PLACEHOLDER_RE, (_match, key) => key === 'days' ? String(days) : key);
+  return text.replace(PLACEHOLDER_RE, (_match, key) => {
+    if (key === 'days') return String(days);
+    return Object.prototype.hasOwnProperty.call(loadedLiveValues, key)
+      ? String(loadedLiveValues[key])
+      : key;
+  }).normalize('NFC');
 }
 
 async function ensureFont() {
@@ -741,7 +746,8 @@ function buildCorner(name, days, tracking) {
   if (liveKeys.length > 0) {
     const glyphs = buildRuntimeGlyphAtlas(text);
     const currentText = previewDynamicText(text, days);
-    const preview = layoutGlyphText(currentText, glyphs, layout.anchor, layout.baseline, color, tracking, layout.align);
+    const previewGlyphs = buildGlyphAtlasFromText(currentText);
+    const preview = layoutGlyphText(currentText, previewGlyphs, layout.anchor, layout.baseline, color, tracking, layout.align);
     return {
       width: preview.width,
       layers: preview.layers,
