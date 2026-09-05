@@ -813,15 +813,15 @@ async function renderPreview() {
     const backgroundImage = localBackgroundImage || (remoteBackground ? previewImageFor(remoteBackground.source) : null);
     if (background && backgroundImage) drawImageLayer(ctx, backgroundImage, background);
 
-    ctx.fillStyle = `rgba(0,0,0,${Number(els.dim.value) / 100})`;
-    ctx.fillRect(0, 0, W, H);
-
     for (let index = 1; index < resolvedLayers.length; index++) {
       const layer = resolvedLayers[index];
       if (!layer) continue;
       const image = previewImageFor(layer.source);
       if (image) drawImageLayer(ctx, image, layer);
     }
+
+    ctx.fillStyle = `rgba(0,0,0,${Number(els.dim.value) / 100})`;
+    ctx.fillRect(0, 0, W, H);
 
     drawFrame(ctx);
     for (const name of ['tl', 'tr', 'bl', 'br']) {
