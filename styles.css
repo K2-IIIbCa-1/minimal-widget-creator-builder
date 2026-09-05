@@ -81,6 +81,33 @@ input[type="color"] { width: 100%; min-height: 30px; padding: 1px; }
 .toggle-row { display: flex; align-items: center; gap: 7px; }
 .toggle-row > span { margin: 0; }
 
+.image-layer {
+  margin: 0 0 6px;
+  padding: 6px;
+  border: 1px solid #999;
+  background: #ddd9d0;
+}
+.image-layer-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 24px; }
+.image-layer-header strong { font-size: 11px; }
+.image-layer-actions { display: flex; gap: 3px; }
+.image-layer-actions button { min-width: 24px; min-height: 22px; padding: 1px 5px; }
+.image-layer details { margin-top: 5px; padding-top: 4px; border-top: 1px solid #aaa; }
+.image-layer summary { margin-bottom: 4px; }
+.image-layer details small { display: block; margin: 2px 0 4px; }
+.layer-value-grid { display: grid; gap: 3px; }
+.layer-value-editor {
+  display: grid;
+  grid-template-columns: 48px 58px minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+.layer-value-label { font-size: 10px; }
+.layer-value-editor input, .layer-value-editor select { min-height: 24px; padding: 2px 4px; font-size: 11px; }
+.layer-value-editor input[data-role="fixed"]:not([hidden]) { grid-column: span 2; }
+.compact-toggle { margin: 4px 0; font-size: 10px; }
+.background-preview-tools { margin-top: 7px; }
+
 button {
   min-height: 27px;
   padding: 4px 9px;

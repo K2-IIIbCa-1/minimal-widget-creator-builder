@@ -61,51 +61,27 @@
         </div>
 
         <fieldset>
-          <legend>Background</legend>
-          <label>
-            <span>Hosted image URL</span>
-            <input id="backgroundUrlInput" type="url" placeholder="https://.../background.webp" />
-          </label>
-          <label>
-            <span>Local image (preview only)</span>
-            <input id="backgroundFileInput" type="file" accept="image/png,image/jpeg,image/webp" />
-          </label>
+          <legend>Image layers</legend>
+          <small class="field-note">Background stays at the bottom; later layers render above earlier ones. Source, position, size and crop can each be Fixed or Live. Live shows a field name plus fallback.</small>
+          <div id="imageLayers"></div>
           <div class="button-row">
-            <button id="downloadBgButton" type="button" disabled>Download 200×40 WebP</button>
-            <button id="clearBgButton" type="button">Clear local image</button>
+            <button id="addImageLayerButton" type="button">+ Add layer</button>
           </div>
-          <small>Local files never leave the browser. Upload the optimized image to your own host before publishing.</small>
-        </fieldset>
+          <datalist id="liveImageFieldList"></datalist>
+          <datalist id="liveNumberFieldList"></datalist>
 
-        <fieldset>
-          <legend>Live image</legend>
-          <label class="toggle-row">
-            <input id="liveImageEnabledInput" type="checkbox" />
-            <span>Enable live image crop</span>
-          </label>
-          <div id="liveImageFields" hidden>
+          <details class="background-preview-tools">
+            <summary>Background local preview</summary>
             <label>
-              <span>Live data key</span>
-              <input id="liveImageKeyInput" maxlength="32" value="characterImage" />
+              <span>Local image (preview only)</span>
+              <input id="backgroundFileInput" type="file" accept="image/png,image/jpeg,image/webp" />
             </label>
-            <div class="row2-even">
-              <label><span>Source width</span><input id="liveImageSourceWidthInput" type="number" min="1" max="2048" step="1" value="300" /></label>
-              <label><span>Source height</span><input id="liveImageSourceHeightInput" type="number" min="1" max="2048" step="1" value="300" /></label>
+            <div class="button-row">
+              <button id="downloadBgButton" type="button" disabled>Download 200×40 WebP</button>
+              <button id="clearBgButton" type="button">Clear local image</button>
             </div>
-            <div class="row2-even">
-              <label><span>Crop X</span><input id="liveImageCropXInput" type="number" min="0" step="1" value="130" /></label>
-              <label><span>Crop Y</span><input id="liveImageCropYInput" type="number" min="0" step="1" value="40" /></label>
-            </div>
-            <div class="row2-even">
-              <label><span>Crop width</span><input id="liveImageCropWidthInput" type="number" min="1" step="1" value="40" /></label>
-              <label><span>Crop height</span><input id="liveImageCropHeightInput" type="number" min="1" step="1" value="40" /></label>
-            </div>
-            <div class="row2-even">
-              <label><span>Output X</span><input id="liveImageOutputXInput" type="number" step="1" value="160" /></label>
-              <label><span>Output Y</span><input id="liveImageOutputYInput" type="number" step="1" value="0" /></label>
-            </div>
-            <small>Preview uses the current stored live value for this key after loading the Widget ID. The source is drawn at its configured pixel size with no scaling.</small>
-          </div>
+            <small>Local files never leave the browser and only override the Background layer preview. Upload the optimized image to your own host before publishing.</small>
+          </details>
         </fieldset>
 
         <fieldset>

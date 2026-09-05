@@ -11,6 +11,8 @@ const MAX_CONFIG_BYTES = 60 * 1024;
 const DEFAULT_TRACKING = 1;
 const WIDGET_ID_RE = /^[a-z0-9][a-z0-9_-]{0,47}$/;
 const LIVE_KEY_RE = /^[A-Za-z][A-Za-z0-9_-]{0,31}$/;
+const LEGACY_LIVE_NUMBER_RE = /^\{([A-Za-z][A-Za-z0-9_-]{0,31})\}$/;
+const MAX_IMAGE_LAYERS = 6;
 const PLACEHOLDER_RE = /\{([A-Za-z][A-Za-z0-9_-]{0,31})\}/g;
 const RUNTIME_ASCII = Array.from({ length: 95 }, (_, i) => String.fromCharCode(i + 32)).join('');
 
@@ -33,21 +35,13 @@ const els = {
   brText: $('brTextInput'), brColor: $('brColorInput'),
   endedAt: $('endedAtInput'),
   timezone: $('timezoneInput'),
-  bgUrl: $('backgroundUrlInput'),
+  imageLayers: $('imageLayers'),
+  addImageLayer: $('addImageLayerButton'),
+  liveImageFieldList: $('liveImageFieldList'),
+  liveNumberFieldList: $('liveNumberFieldList'),
   bgFile: $('backgroundFileInput'),
   downloadBg: $('downloadBgButton'),
   clearBg: $('clearBgButton'),
-  liveImageEnabled: $('liveImageEnabledInput'),
-  liveImageFields: $('liveImageFields'),
-  liveImageKey: $('liveImageKeyInput'),
-  liveImageSourceWidth: $('liveImageSourceWidthInput'),
-  liveImageSourceHeight: $('liveImageSourceHeightInput'),
-  liveImageCropX: $('liveImageCropXInput'),
-  liveImageCropY: $('liveImageCropYInput'),
-  liveImageCropWidth: $('liveImageCropWidthInput'),
-  liveImageCropHeight: $('liveImageCropHeightInput'),
-  liveImageOutputX: $('liveImageOutputXInput'),
-  liveImageOutputY: $('liveImageOutputYInput'),
   fallbackColor: $('fallbackColorInput'),
   shadowColor: $('shadowColorInput'),
   borderColor: $('borderColorInput'),
@@ -89,9 +83,9 @@ const cornerInputs = {
 
 let localBackgroundUrl = null;
 let localBackgroundImage = null;
-let hostedBackgroundImage = null;
 let loadedLiveValues = {};
-let livePreviewImage = null;
+let imageLayers = [createBackgroundLayer()];
+const previewImageCache = new Map();
 let lastConfig = '';
 let renderGeneration = 0;
 
@@ -130,34 +124,286 @@ function validateWidgetId() {
   return id;
 }
 
-function integerInput(input, label) {
-  const value = Number(input.value);
-  if (!Number.isInteger(value)) throw new Error(`${label} must be an integer.`);
+function layerValueState(value) {
+  return { mode: 'fixed', fixed: String(value), field: '', fallback: String(value) };
+}
+
+function createBackgroundLayer(source = '') {
+  return {
+    name: 'Background',
+    fit: 'cover',
+    source: layerValueState(source),
+    x: layerValueState(0), y: layerValueState(0), w: layerValueState(W), h: layerValueState(H),
+    cropEnabled: false,
+    cropX: layerValueState(0), cropY: layerValueState(0), cropW: layerValueState(W), cropH: layerValueState(H),
+  };
+}
+
+function createImageLayer(index = imageLayers.length) {
+  return {
+    name: `Layer ${index}`,
+    fit: 'fill',
+    source: layerValueState(''),
+    x: layerValueState(0), y: layerValueState(0), w: layerValueState(40), h: layerValueState(40),
+    cropEnabled: false,
+    cropX: layerValueState(0), cropY: layerValueState(0), cropW: layerValueState(40), cropH: layerValueState(40),
+  };
+}
+
+function validCropRect(crop, sourceW, sourceH) {
+  const [x, y, w, h] = crop;
+  return x >= 0 && y >= 0 && w >= 1 && h >= 1 && x + w <= sourceW && y + h <= sourceH;
+}
+
+function updateLiveFieldSuggestions() {
+  els.liveImageFieldList.replaceChildren();
+  els.liveNumberFieldList.replaceChildren();
+  for (const [key, value] of Object.entries(loadedLiveValues)) {
+    if (typeof value === 'string' && /^https:\/\//i.test(value)) els.liveImageFieldList.append(new Option(key, key));
+    if (typeof value === 'number' || (typeof value === 'string' && value.trim() && Number.isInteger(Number(value)))) {
+      els.liveNumberFieldList.append(new Option(key, key));
+    }
+  }
+}
+
+function imageValueEditor(label, property, state, kind) {
+  const editor = document.createElement('div');
+  editor.className = 'layer-value-editor';
+  editor.dataset.property = property;
+  editor.dataset.kind = kind;
+
+  const title = document.createElement('span');
+  title.className = 'layer-value-label';
+  title.textContent = label;
+  editor.append(title);
+
+  const mode = document.createElement('select');
+  mode.dataset.role = 'mode';
+  mode.append(new Option('Fixed', 'fixed'), new Option('Live', 'live'));
+  editor.append(mode);
+
+  const fixed = document.createElement('input');
+  fixed.dataset.role = 'fixed';
+  fixed.type = kind === 'number' ? 'number' : 'url';
+  if (kind === 'number') fixed.step = '1';
+  else fixed.placeholder = 'https://...';
+  editor.append(fixed);
+
+  const field = document.createElement('input');
+  field.dataset.role = 'field';
+  field.type = 'text';
+  field.maxLength = 32;
+  field.placeholder = 'Live field';
+  field.setAttribute('list', kind === 'number' ? 'liveNumberFieldList' : 'liveImageFieldList');
+  editor.append(field);
+
+  const fallback = document.createElement('input');
+  fallback.dataset.role = 'fallback';
+  fallback.type = kind === 'number' ? 'number' : 'url';
+  if (kind === 'number') fallback.step = '1';
+  fallback.placeholder = kind === 'number' ? 'Fallback' : 'Fallback URL';
+  fallback.title = 'Fallback';
+  editor.append(fallback);
+
+  syncValueEditor(editor, state);
+  return editor;
+}
+
+function syncValueEditor(editor, state) {
+  const live = state.mode === 'live';
+  const mode = editor.querySelector('[data-role="mode"]');
+  const fixed = editor.querySelector('[data-role="fixed"]');
+  const field = editor.querySelector('[data-role="field"]');
+  const fallback = editor.querySelector('[data-role="fallback"]');
+  mode.value = state.mode;
+  fixed.value = state.fixed;
+  field.value = state.field;
+  fallback.value = state.fallback;
+  fixed.hidden = live;
+  field.hidden = !live;
+  fallback.hidden = !live;
+}
+
+function renderImageLayerControls() {
+  els.imageLayers.replaceChildren();
+  imageLayers.forEach((layer, index) => {
+    const article = document.createElement('article');
+    article.className = 'image-layer';
+    article.dataset.layerIndex = String(index);
+
+    const header = document.createElement('div');
+    header.className = 'image-layer-header';
+    const title = document.createElement('strong');
+    title.textContent = index === 0 ? 'Background' : layer.name;
+    header.append(title);
+
+    if (index > 0) {
+      const actions = document.createElement('div');
+      actions.className = 'image-layer-actions';
+      for (const [action, label] of [['up', 'Raise'], ['down', 'Lower'], ['remove', '−']]) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.action = action;
+        button.textContent = label;
+        button.title = action === 'up' ? 'Raise layer' : action === 'down' ? 'Lower layer' : 'Remove layer';
+        if (action === 'up') button.disabled = index === imageLayers.length - 1;
+        if (action === 'down') button.disabled = index === 1;
+        actions.append(button);
+      }
+      header.append(actions);
+    }
+    article.append(header);
+
+    article.append(imageValueEditor('Source', 'source', layer.source, 'url'));
+
+    const positionDetails = document.createElement('details');
+    const positionSummary = document.createElement('summary');
+    positionSummary.textContent = 'Position & size';
+    positionDetails.append(positionSummary);
+    const positionGrid = document.createElement('div');
+    positionGrid.className = 'layer-value-grid';
+    positionGrid.append(
+      imageValueEditor('X', 'x', layer.x, 'number'),
+      imageValueEditor('Y', 'y', layer.y, 'number'),
+      imageValueEditor('W', 'w', layer.w, 'number'),
+      imageValueEditor('H', 'h', layer.h, 'number'),
+    );
+    positionDetails.append(positionGrid);
+    article.append(positionDetails);
+
+    const cropDetails = document.createElement('details');
+    const cropSummary = document.createElement('summary');
+    cropSummary.textContent = 'Crop';
+    cropDetails.append(cropSummary);
+    const cropToggle = document.createElement('label');
+    cropToggle.className = 'toggle-row compact-toggle';
+    const cropEnabled = document.createElement('input');
+    cropEnabled.type = 'checkbox';
+    cropEnabled.dataset.role = 'crop-enabled';
+    cropEnabled.checked = layer.cropEnabled;
+    cropToggle.append(cropEnabled, document.createTextNode('Enable crop'));
+    cropDetails.append(cropToggle);
+    const cropNote = document.createElement('small');
+    cropNote.textContent = 'Crop X/Y are offsets inside the full layer image; Position X/Y remains the output anchor.';
+    cropDetails.append(cropNote);
+    const cropGrid = document.createElement('div');
+    cropGrid.className = 'layer-value-grid';
+    cropGrid.dataset.role = 'crop-fields';
+    cropGrid.hidden = !layer.cropEnabled;
+    cropGrid.append(
+      imageValueEditor('X', 'cropX', layer.cropX, 'number'),
+      imageValueEditor('Y', 'cropY', layer.cropY, 'number'),
+      imageValueEditor('W', 'cropW', layer.cropW, 'number'),
+      imageValueEditor('H', 'cropH', layer.cropH, 'number'),
+    );
+    cropDetails.append(cropGrid);
+    article.append(cropDetails);
+
+    els.imageLayers.append(article);
+  });
+  els.addImageLayer.disabled = imageLayers.length >= MAX_IMAGE_LAYERS;
+}
+
+function stateForProperty(layer, property) {
+  return layer[property];
+}
+
+function parseLayerNumber(raw, label, min, max) {
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${label} must be an integer from ${min} to ${max}.`);
   return value;
 }
 
-function buildLiveImageConfig() {
-  if (!els.liveImageEnabled.checked) return null;
-  const key = els.liveImageKey.value.trim();
-  if (!LIVE_KEY_RE.test(key)) throw new Error('Live image key must use letters, digits, _ or - and start with a letter.');
+function validateImageUrl(value, label) {
+  const trimmed = value.trim();
+  if (trimmed && !/^https:\/\//i.test(trimmed)) throw new Error(`${label} must use HTTPS.`);
+  return trimmed;
+}
 
-  const sourceW = integerInput(els.liveImageSourceWidth, 'Source width');
-  const sourceH = integerInput(els.liveImageSourceHeight, 'Source height');
-  if (sourceW < 1 || sourceH < 1 || sourceW > 2048 || sourceH > 2048) throw new Error('Live image source size must be between 1 and 2048 px.');
-
-  const cropX = integerInput(els.liveImageCropX, 'Crop X');
-  const cropY = integerInput(els.liveImageCropY, 'Crop Y');
-  const cropW = integerInput(els.liveImageCropWidth, 'Crop width');
-  const cropH = integerInput(els.liveImageCropHeight, 'Crop height');
-  if (cropX < 0 || cropY < 0 || cropW < 1 || cropH < 1 || cropX + cropW > sourceW || cropY + cropH > sourceH) {
-    throw new Error('Live image crop must stay inside the source image.');
+function buildLayerValue(state, label, kind, min = -2048, max = 2048) {
+  if (kind === 'url') {
+    if (state.mode === 'fixed') return validateImageUrl(state.fixed, label);
+    const field = state.field.trim();
+    if (!LIVE_KEY_RE.test(field)) throw new Error(`${label} live field must start with a letter and use letters, digits, _ or -.`);
+    return { live: field, fallback: validateImageUrl(state.fallback, `${label} fallback`) };
   }
 
-  const x = integerInput(els.liveImageOutputX, 'Output X');
-  const y = integerInput(els.liveImageOutputY, 'Output Y');
-  if (x < -W || x > W || y < -H || y > H) throw new Error('Live image output position is out of bounds.');
+  if (state.mode === 'fixed') return parseLayerNumber(state.fixed, label, min, max);
+  const field = state.field.trim();
+  if (!LIVE_KEY_RE.test(field)) throw new Error(`${label} live field must start with a letter and use letters, digits, _ or -.`);
+  return { live: field, fallback: parseLayerNumber(state.fallback, `${label} fallback`, min, max) };
+}
 
-  return { key, sourceSize: [sourceW, sourceH], crop: [cropX, cropY, cropW, cropH], position: [x, y] };
+function configFallback(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) && 'live' in value ? value.fallback : value;
+}
+
+function buildImageLayersConfig() {
+  return imageLayers.map((layer, index) => {
+    const source = buildLayerValue(layer.source, `${layer.name} source`, 'url');
+    const rect = [
+      buildLayerValue(layer.x, `${layer.name} X`, 'number'),
+      buildLayerValue(layer.y, `${layer.name} Y`, 'number'),
+      buildLayerValue(layer.w, `${layer.name} width`, 'number', 1, 2048),
+      buildLayerValue(layer.h, `${layer.name} height`, 'number', 1, 2048),
+    ];
+
+    let crop;
+    if (layer.cropEnabled) {
+      crop = [
+        buildLayerValue(layer.cropX, `${layer.name} crop X`, 'number', 0, 2048),
+        buildLayerValue(layer.cropY, `${layer.name} crop Y`, 'number', 0, 2048),
+        buildLayerValue(layer.cropW, `${layer.name} crop width`, 'number', 1, 2048),
+        buildLayerValue(layer.cropH, `${layer.name} crop height`, 'number', 1, 2048),
+      ];
+      const fallbackCrop = crop.map(configFallback);
+      if (!validCropRect(fallbackCrop, configFallback(rect[2]), configFallback(rect[3]))) {
+        throw new Error(`${layer.name} crop fallback must stay inside its width/height.`);
+      }
+    }
+
+    return {
+      name: index === 0 ? 'Background' : layer.name,
+      source,
+      rect,
+      ...(crop ? { crop } : {}),
+      fit: index === 0 ? 'cover' : 'fill',
+    };
+  });
+}
+
+function resolveConfigValue(value, kind, min = -2048, max = 2048) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !('live' in value)) return value;
+  const raw = loadedLiveValues[value.live];
+  if (kind === 'url') return typeof raw === 'string' ? raw : value.fallback;
+  const candidate = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() ? Number(raw) : Number.NaN;
+  return Number.isInteger(candidate) && candidate >= min && candidate <= max ? candidate : value.fallback;
+}
+
+function resolveImageLayerConfig(layer, sourceOverride = '') {
+  let source = sourceOverride || String(resolveConfigValue(layer.source, 'url') || '').trim();
+  if ((!source || !/^https:\/\//i.test(source)) && layer.source && typeof layer.source === 'object' && 'live' in layer.source) {
+    source = String(layer.source.fallback || '').trim();
+  }
+  if (!source || !/^https:\/\//i.test(source)) return null;
+  const rect = [
+    resolveConfigValue(layer.rect[0], 'number', -2048, 2048),
+    resolveConfigValue(layer.rect[1], 'number', -2048, 2048),
+    resolveConfigValue(layer.rect[2], 'number', 1, 2048),
+    resolveConfigValue(layer.rect[3], 'number', 1, 2048),
+  ];
+  const [x, y, w, h] = rect;
+  let crop;
+  if (layer.crop) {
+    crop = [
+      resolveConfigValue(layer.crop[0], 'number', 0, 2048),
+      resolveConfigValue(layer.crop[1], 'number', 0, 2048),
+      resolveConfigValue(layer.crop[2], 'number', 1, 2048),
+      resolveConfigValue(layer.crop[3], 'number', 1, 2048),
+    ];
+    if (!validCropRect(crop, w, h)) return null;
+  }
+  return { source, rect, crop, fit: layer.fit === 'cover' ? 'cover' : 'fill' };
 }
 
 function validateDaysPattern(text) {
@@ -417,49 +663,57 @@ function drawFallbackBackground(ctx) {
   ctx.fillRect(0, 0, W, H);
 }
 
-function drawImageCover(ctx, image) {
-  const scale = Math.max(W / image.naturalWidth, H / image.naturalHeight);
+function drawImageCoverRect(ctx, image, x, y, w, h) {
+  const scale = Math.max(w / image.naturalWidth, h / image.naturalHeight);
   const dw = image.naturalWidth * scale;
   const dh = image.naturalHeight * scale;
-  ctx.drawImage(image, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  ctx.drawImage(image, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+  ctx.restore();
 }
 
-function currentBackgroundImage() {
-  return localBackgroundImage || hostedBackgroundImage || null;
-}
+function previewImageFor(src) {
+  if (!src) return null;
+  const cached = previewImageCache.get(src);
+  if (cached?.status === 'loaded') return cached.image;
+  if (cached) return null;
 
-async function loadHostedBackground() {
-  const src = els.bgUrl.value.trim();
-  if (!src) { hostedBackgroundImage = null; return; }
+  const entry = { status: 'loading', image: null };
+  previewImageCache.set(src, entry);
   const image = new Image();
-  hostedBackgroundImage = await new Promise((resolve) => {
-    image.onload = () => resolve(image);
-    image.onerror = () => resolve(null);
-    image.src = src;
-  });
+  image.onload = () => {
+    entry.status = 'loaded';
+    entry.image = image;
+    renderPreview();
+  };
+  image.onerror = () => {
+    entry.status = 'error';
+    renderPreview();
+  };
+  image.src = src;
+  return null;
 }
 
-async function loadLivePreviewImage() {
-  const key = els.liveImageKey.value.trim();
-  const src = els.liveImageEnabled.checked && LIVE_KEY_RE.test(key) ? loadedLiveValues[key] : null;
-  if (typeof src !== 'string' || !/^https:\/\//i.test(src)) { livePreviewImage = null; return; }
-  const image = new Image();
-  livePreviewImage = await new Promise((resolve) => {
-    image.onload = () => resolve(image);
-    image.onerror = () => resolve(null);
-    image.src = src;
-  });
-}
+function drawImageLayer(ctx, image, layer) {
+  const [x, y, w, h] = layer.rect;
+  if (layer.fit === 'cover' && !layer.crop) {
+    drawImageCoverRect(ctx, image, x, y, w, h);
+    return;
+  }
+  if (!layer.crop) {
+    ctx.drawImage(image, x, y, w, h);
+    return;
+  }
 
-function drawLiveImageCrop(ctx, image, config) {
-  const [sourceW, sourceH] = config.sourceSize;
-  const [cropX, cropY, cropW, cropH] = config.crop;
-  const [x, y] = config.position;
+  const [cropX, cropY, cropW, cropH] = layer.crop;
   ctx.save();
   ctx.beginPath();
   ctx.rect(x, y, cropW, cropH);
   ctx.clip();
-  ctx.drawImage(image, x - cropX, y - cropY, sourceW, sourceH);
+  ctx.drawImage(image, x - cropX, y - cropY, w, h);
   ctx.restore();
 }
 
@@ -471,7 +725,7 @@ function optimizedBackgroundBlob() {
     canvas.width = W;
     canvas.height = H;
     const ctx = canvas.getContext('2d');
-    drawImageCover(ctx, img);
+    drawImageCoverRect(ctx, img, 0, 0, W, H);
     canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('WebP export failed.')), 'image/webp', 0.86);
   });
 }
@@ -537,17 +791,32 @@ async function renderPreview() {
   const generation = ++renderGeneration;
   try {
     const baked = await buildBakedState();
+    const layerConfigs = buildImageLayersConfig();
+    const resolvedLayers = layerConfigs.map((layer) => resolveImageLayerConfig(layer));
     if (generation !== renderGeneration) return;
 
     const ctx = els.preview.getContext('2d');
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, W, H);
-    const bg = currentBackgroundImage();
-    if (bg) drawImageCover(ctx, bg); else drawFallbackBackground(ctx);
+    drawFallbackBackground(ctx);
+
+    const remoteBackground = resolvedLayers[0];
+    const background = localBackgroundImage
+      ? resolveImageLayerConfig(layerConfigs[0], 'https://local-preview.invalid/image')
+      : remoteBackground;
+    const backgroundImage = localBackgroundImage || (remoteBackground ? previewImageFor(remoteBackground.source) : null);
+    if (background && backgroundImage) drawImageLayer(ctx, backgroundImage, background);
+
     ctx.fillStyle = `rgba(0,0,0,${Number(els.dim.value) / 100})`;
     ctx.fillRect(0, 0, W, H);
-    const liveImage = buildLiveImageConfig();
-    if (liveImage && livePreviewImage) drawLiveImageCrop(ctx, livePreviewImage, liveImage);
+
+    for (let index = 1; index < resolvedLayers.length; index++) {
+      const layer = resolvedLayers[index];
+      if (!layer) continue;
+      const image = previewImageFor(layer.source);
+      if (image) drawImageLayer(ctx, image, layer);
+    }
+
     drawFrame(ctx);
     for (const name of ['tl', 'tr', 'bl', 'br']) {
       for (const layer of baked.corners[name].layers) drawPackedMask(ctx, layer, layer.color);
@@ -571,20 +840,20 @@ async function renderPreview() {
     if (baked.corners.br.width > usableWidth) warnings.push('Bottom-right text is wider than the card.');
     if (baked.corners.tl.width + baked.corners.tr.width + 6 > usableWidth) warnings.push('Top-left and top-right text may overlap.');
     if (baked.corners.bl.width + baked.corners.br.width + 6 > usableWidth) warnings.push('Bottom-left and bottom-right text may overlap.');
-    if (els.bgUrl.value.trim() && !hostedBackgroundImage && !localBackgroundImage) {
-      warnings.push('Background URL could not be previewed. It may still work in the Worker if the host blocks browser CORS.');
-    }
-    if (els.liveImageEnabled.checked) {
-      const key = els.liveImageKey.value.trim();
-      const src = loadedLiveValues[key];
-      if (typeof src !== 'string' || !src) {
-        warnings.push(`No stored live image value for ${key || 'this key'}. Load the Widget ID after its data source has pushed live data.`);
-      } else if (!/^https:\/\//i.test(src)) {
-        warnings.push('Stored live image value must be an HTTPS URL.');
-      } else if (!livePreviewImage) {
-        warnings.push('Stored live image could not be previewed. The Worker may still be able to fetch it.');
+
+    layerConfigs.forEach((layer, index) => {
+      const label = index === 0 ? 'Background' : layer.name;
+      const source = String(resolveConfigValue(layer.source, 'url') || '').trim();
+      if (layer.source && typeof layer.source === 'object' && 'live' in layer.source && !loadedLiveValues[layer.source.live] && !layer.source.fallback) {
+        warnings.push(`${label}: no live image value for ${layer.source.live}. Load this Widget ID after live data has been pushed.`);
+      } else if (source && !/^https:\/\//i.test(source)) {
+        warnings.push(`${label}: resolved image source must use HTTPS.`);
+      } else if (source && !resolvedLayers[index]) {
+        warnings.push(`${label}: live position/crop values are invalid or outside the configured image size.`);
+      } else if (source && !(index === 0 && localBackgroundImage) && previewImageCache.get(source)?.status === 'error') {
+        warnings.push(`${label}: image could not be previewed. The Worker may still be able to fetch it.`);
       }
-    }
+    });
     showWarnings(warnings);
   } catch (error) {
     showWarnings([error instanceof Error ? error.message : String(error)]);
@@ -608,16 +877,11 @@ function escapeHtml(value) {
 async function generateConfig() {
   validateWidgetId();
   const baked = await buildBakedState();
-  const backgroundUrl = els.bgUrl.value.trim();
-  if (backgroundUrl && !/^https:\/\//i.test(backgroundUrl)) throw new Error('Hosted background URL must use HTTPS.');
-
-  const liveImage = buildLiveImageConfig();
   const config = {
-    v: 3,
+    v: 4,
     size: [W, H],
     endedAt: baked.iso,
-    backgroundUrl,
-    ...(liveImage ? { liveImage } : {}),
+    layers: buildImageLayersConfig(),
     fallbackColor: els.fallbackColor.value,
     dim: Number(els.dim.value) / 100,
     shadowColor: els.shadowColor.value,
@@ -639,26 +903,82 @@ async function generateConfig() {
   return encoded;
 }
 
+function legacyLayerValue(value, fallback) {
+  if (Number.isInteger(value)) return value;
+  const match = typeof value === 'string' ? value.match(LEGACY_LIVE_NUMBER_RE) : null;
+  return match ? { live: match[1], fallback } : fallback;
+}
+
+function normalizeBuilderConfig(raw) {
+  if (raw.v === 4) return raw;
+  if (raw.v !== 3) throw new Error('This widget was made with an incompatible Builder version.');
+
+  const layers = [{
+    name: 'Background',
+    source: raw.backgroundUrl || '',
+    rect: [0, 0, W, H],
+    fit: 'cover',
+  }];
+  if (raw.liveImage) {
+    const [sourceW, sourceH] = raw.liveImage.sourceSize;
+    const [x, y] = raw.liveImage.position;
+    const fallbacks = [0, 0, sourceW || 1, sourceH || 1];
+    layers.push({
+      name: 'Layer 1',
+      source: { live: raw.liveImage.key, fallback: '' },
+      rect: [x, y, sourceW, sourceH],
+      crop: raw.liveImage.crop.map((value, index) => legacyLayerValue(value, fallbacks[index])),
+      fit: 'fill',
+    });
+  }
+  return { ...raw, v: 4, layers };
+}
+
+function stateFromConfigValue(value, fallback) {
+  if (value && typeof value === 'object' && !Array.isArray(value) && 'live' in value) {
+    const base = value.fallback ?? fallback;
+    return { mode: 'live', fixed: String(base), field: String(value.live || ''), fallback: String(base) };
+  }
+  return layerValueState(value ?? fallback);
+}
+
+function stateFromImageLayer(layer, index) {
+  const rect = Array.isArray(layer.rect) && layer.rect.length === 4 ? layer.rect : [0, 0, index === 0 ? W : 40, index === 0 ? H : 40];
+  const crop = Array.isArray(layer.crop) && layer.crop.length === 4 ? layer.crop : [0, 0, configFallback(rect[2]), configFallback(rect[3])];
+  return {
+    name: index === 0 ? 'Background' : (layer.name || `Layer ${index}`),
+    fit: index === 0 ? 'cover' : 'fill',
+    source: stateFromConfigValue(layer.source, ''),
+    x: stateFromConfigValue(rect[0], 0),
+    y: stateFromConfigValue(rect[1], 0),
+    w: stateFromConfigValue(rect[2], index === 0 ? W : 40),
+    h: stateFromConfigValue(rect[3], index === 0 ? H : 40),
+    cropEnabled: Boolean(layer.crop),
+    cropX: stateFromConfigValue(crop[0], 0),
+    cropY: stateFromConfigValue(crop[1], 0),
+    cropW: stateFromConfigValue(crop[2], index === 0 ? W : 40),
+    cropH: stateFromConfigValue(crop[3], index === 0 ? H : 40),
+  };
+}
+
 function applyConfig(encoded) {
-  const config = JSON.parse(base64UrlToUtf8(encoded));
-  if (config.v !== 3) throw new Error('This widget was made with an incompatible Builder version.');
+  const config = normalizeBuilderConfig(JSON.parse(base64UrlToUtf8(encoded)));
 
   const match = String(config.endedAt).match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}):\d{2}([+-]\d{2}:\d{2})$/);
   if (match) {
     els.endedAt.value = match[1];
     els.timezone.value = match[2];
   }
-  els.bgUrl.value = config.backgroundUrl || '';
-  const liveImage = config.liveImage || null;
-  els.liveImageEnabled.checked = Boolean(liveImage);
-  if (liveImage) {
-    els.liveImageKey.value = liveImage.key;
-    [els.liveImageSourceWidth.value, els.liveImageSourceHeight.value] = liveImage.sourceSize.map(String);
-    [els.liveImageCropX.value, els.liveImageCropY.value, els.liveImageCropWidth.value, els.liveImageCropHeight.value] = liveImage.crop.map(String);
-    [els.liveImageOutputX.value, els.liveImageOutputY.value] = liveImage.position.map(String);
-  }
-  els.liveImageFields.hidden = !liveImage;
-  livePreviewImage = null;
+  imageLayers = (Array.isArray(config.layers) && config.layers.length ? config.layers : [{ name: 'Background', source: '', rect: [0, 0, W, H], fit: 'cover' }])
+    .slice(0, MAX_IMAGE_LAYERS)
+    .map(stateFromImageLayer);
+  renderImageLayerControls();
+  previewImageCache.clear();
+  if (localBackgroundUrl) URL.revokeObjectURL(localBackgroundUrl);
+  localBackgroundUrl = null;
+  localBackgroundImage = null;
+  els.bgFile.value = '';
+  els.downloadBg.disabled = true;
   els.fallbackColor.value = config.fallbackColor || '#6f7188';
   els.shadowColor.value = config.shadowColor || '#000000';
   els.borderColor.value = config.frame?.border || '#23232a';
@@ -770,8 +1090,8 @@ async function loadWidget() {
     setDeployStatus(`Loading ${id}...`);
     const result = await adminRequest('GET', `/api/widgets/${id}`);
     loadedLiveValues = result.live && typeof result.live === 'object' && !Array.isArray(result.live) ? result.live : {};
+    updateLiveFieldSuggestions();
     applyConfig(result.config);
-    await Promise.all([loadHostedBackground(), loadLivePreviewImage()]);
     await renderPreview();
     setDeployStatus(`Loaded: ${id}`);
   } catch (error) {
@@ -812,9 +1132,7 @@ function generateAdminToken() {
 const configInputs = [
   els.tlText, els.tlColor, els.trText, els.trColor, els.blText, els.blColor, els.brText, els.brColor,
   els.endedAt, els.timezone, els.fallbackColor, els.shadowColor, els.borderColor, els.frameLight, els.frameDark,
-  els.dim, els.tracking, els.liveImageKey, els.liveImageSourceWidth, els.liveImageSourceHeight,
-  els.liveImageCropX, els.liveImageCropY, els.liveImageCropWidth, els.liveImageCropHeight,
-  els.liveImageOutputX, els.liveImageOutputY,
+  els.dim, els.tracking,
 ];
 for (const input of configInputs) {
   input.addEventListener('input', invalidateAndRender);
@@ -826,30 +1144,61 @@ els.widgetId.addEventListener('change', updateWidgetUrl);
 els.workerUrl.addEventListener('input', updateWidgetUrl);
 els.workerUrl.addEventListener('change', updateWidgetUrl);
 
-els.liveImageEnabled.addEventListener('change', async () => {
-  els.liveImageFields.hidden = !els.liveImageEnabled.checked;
-  lastConfig = '';
-  els.copy.disabled = true;
-  await loadLivePreviewImage();
-  renderPreview();
-});
-els.liveImageKey.addEventListener('change', async () => {
-  await loadLivePreviewImage();
-  renderPreview();
+function handleImageLayerValue(event) {
+  const target = event.target;
+  const article = target.closest?.('.image-layer');
+  if (!article) return;
+  const index = Number(article.dataset.layerIndex);
+  const layer = imageLayers[index];
+  if (!layer) return;
+
+  if (target.dataset.role === 'crop-enabled') {
+    layer.cropEnabled = target.checked;
+    const cropFields = article.querySelector('[data-role="crop-fields"]');
+    if (cropFields) cropFields.hidden = !layer.cropEnabled;
+    invalidateAndRender();
+    return;
+  }
+
+  const editor = target.closest('.layer-value-editor');
+  if (!editor) return;
+  const state = stateForProperty(layer, editor.dataset.property);
+  const role = target.dataset.role;
+  if (!state || !role) return;
+
+  if (role === 'mode') {
+    state.mode = target.value === 'live' ? 'live' : 'fixed';
+    if (state.mode === 'live' && !state.fallback) state.fallback = state.fixed;
+    if (state.mode === 'fixed' && !state.fixed && state.fallback) state.fixed = state.fallback;
+    syncValueEditor(editor, state);
+  } else if (role === 'fixed' || role === 'field' || role === 'fallback') {
+    state[role] = target.value;
+  }
+  invalidateAndRender();
+}
+
+els.imageLayers.addEventListener('input', handleImageLayerValue);
+els.imageLayers.addEventListener('change', handleImageLayerValue);
+els.imageLayers.addEventListener('click', (event) => {
+  const button = event.target.closest?.('button[data-action]');
+  if (!button) return;
+  const article = button.closest('.image-layer');
+  const index = Number(article?.dataset.layerIndex);
+  if (!Number.isInteger(index) || index <= 0 || index >= imageLayers.length) return;
+
+  if (button.dataset.action === 'remove') imageLayers.splice(index, 1);
+  if (button.dataset.action === 'up' && index < imageLayers.length - 1) [imageLayers[index], imageLayers[index + 1]] = [imageLayers[index + 1], imageLayers[index]];
+  if (button.dataset.action === 'down' && index > 1) [imageLayers[index], imageLayers[index - 1]] = [imageLayers[index - 1], imageLayers[index]];
+  renderImageLayerControls();
+  invalidateAndRender();
 });
 
-els.bgUrl.addEventListener('change', async () => {
-  lastConfig = '';
-  els.copy.disabled = true;
-  await loadHostedBackground();
-  renderPreview();
+els.addImageLayer.addEventListener('click', () => {
+  if (imageLayers.length >= MAX_IMAGE_LAYERS) return;
+  imageLayers.push(createImageLayer(imageLayers.length));
+  renderImageLayerControls();
+  invalidateAndRender();
 });
-els.bgUrl.addEventListener('input', debounce(async () => {
-  lastConfig = '';
-  els.copy.disabled = true;
-  await loadHostedBackground();
-  renderPreview();
-}, 450));
 
 els.bgFile.addEventListener('change', () => {
   const file = els.bgFile.files?.[0];
@@ -934,7 +1283,7 @@ els.widgetList.addEventListener('change', () => {
 
 async function init() {
   populateTimezones();
-  els.liveImageFields.hidden = !els.liveImageEnabled.checked;
+  renderImageLayerControls();
   els.templateRepoDisplay.textContent = TEMPLATE_REPO_URL;
 
   try {
